@@ -1,0 +1,2 @@
+- คุย DB / query
+- map DB -> business
