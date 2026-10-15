@@ -13,7 +13,7 @@ async function failure(id: string): Promise<boolean> {
   await initMongo();
 
   const { MAX_FAILED_LOGIN, LOCK_MINUTES } = config.auth;
-  const updated = await StaffModel.findOneAndUpdate({ _id: id }, { $inc: { failedLoginCount: 1 } }, { new: true }).lean();
+  const updated = await StaffModel.findOneAndUpdate({ _id: id }, { $inc: { failedLoginCount: 1 } }, { returnDocument: 'after' }).lean();
 
   if (updated && updated.failedLoginCount >= MAX_FAILED_LOGIN) {
     await StaffModel.updateOne({ _id: id }, { $set: { failedLoginCount: 0, lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60_000) } });

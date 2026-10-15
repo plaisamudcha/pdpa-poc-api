@@ -418,7 +418,7 @@ Base: `/api/v1` — response รูปแบบ `{ code, status, errors, payload
 | PUT | `/user/:id` | admin, dpo |
 | GET | `/user/:id/export` | dpo |
 | DELETE | `/user/:id` body `{ reason }` | dpo |
-| GET | `/audit-log?subjectId=&page=&pageSize=` | dpo |
+| GET | `/audit-log?action=&result=&username=&subjectId=&from=&to=&page=&pageSize=` (ทุกตัวกรองไม่บังคับ, เติมชื่อพนักงานให้ตอนแสดง) | dpo |
 
 Validation สำคัญ: อีเมล, checksum เลขบัตรประชาชนไทย 13 หลัก, เบอร์โทร, `pageSize` ≤ 100
 

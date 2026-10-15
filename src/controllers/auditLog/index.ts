@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { config } from '@/controllers/main';
+import type { IAuditLogListDto } from '@/models/dto/auditLog';
 import { list as auditLogList } from '@/services/auditLog/index';
 
 async function list(req: Request, res: Response) {
@@ -7,9 +8,14 @@ async function list(req: Request, res: Response) {
 
   const data = await auditLogList(
     {
-      subjectId: query.subjectId,
       page: Number(query.page ?? config.defaultPage),
       pageSize: Number(query.pageSize ?? config.maxLimit),
+      action: query.action as IAuditLogListDto['action'],
+      result: query.result as IAuditLogListDto['result'],
+      username: query.username,
+      subjectId: query.subjectId,
+      from: query.from,
+      to: query.to,
     },
     req.actor
   );

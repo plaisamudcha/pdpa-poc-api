@@ -2,7 +2,11 @@ import mongoose, { Schema, type Model } from 'mongoose';
 import applyIdTransform from '@/externals/mongo/schema/applyIdTransform';
 import type { Actor } from '@/models/business/actor';
 
-type AuditAction = 'create' | 'list' | 'read' | 'update' | 'export' | 'erase' | 'search' | 'login' | 'logout';
+const AUDIT_ACTIONS = ['create', 'list', 'search', 'read', 'update', 'export', 'erase', 'login', 'logout'] as const;
+const AUDIT_RESULTS = ['ok', 'denied', 'not_found'] as const;
+
+type AuditAction = (typeof AUDIT_ACTIONS)[number];
+type AuditResult = (typeof AUDIT_RESULTS)[number];
 
 /** Audit log — ห้ามมี PII plaintext อยู่ใน log */
 interface TypeAuditLog {
@@ -11,7 +15,7 @@ interface TypeAuditLog {
   subjectId?: string | null;
   fields?: string[]; // field ที่ถูก decrypt แบบเต็ม (ไม่ mask)
   reason?: string | null;
-  result: 'ok' | 'denied' | 'not_found';
+  result: AuditResult;
   createdAt?: Date;
 }
 
@@ -35,10 +39,13 @@ const auditLogSchema = new Schema<TypeAuditLog>(
 );
 
 auditLogSchema.index({ createdAt: -1 });
+auditLogSchema.index({ 'actor.id': 1, createdAt: -1 });
+auditLogSchema.index({ action: 1, createdAt: -1 });
 
 applyIdTransform(auditLogSchema);
 
 const AuditLogModel: Model<TypeAuditLog> = mongoose.models.AuditLog || mongoose.model<TypeAuditLog>('AuditLog', auditLogSchema);
 
-export type { TypeAuditLog, AuditAction };
+export { AUDIT_ACTIONS, AUDIT_RESULTS };
+export type { TypeAuditLog, AuditAction, AuditResult };
 export default AuditLogModel;
