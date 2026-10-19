@@ -198,6 +198,8 @@ DEK ถูก wrap ด้วยวิธีเดียวกัน โดยใ
 
 **`data_keys`** — `{ _id: "<userId>", wrappedDek: "<base64>", kekVersion: "v1", rotatedAt }`
 **`audit_logs`** — `{ actor: { id, role }, action, subjectId, fields, reason, result, createdAt }` (ไม่มี PII)
+**`consent_documents`** — `{ version (unique), title, note, fileId, fileName, fileSize, sha256, uploadedBy: { id, role }, createdAt }` + ไฟล์ใน GridFS `consent_files.files / .chunks`
+**`consents`** — `{ userId, action: accept|withdraw, documentId, version, reason, recordedBy: { id, role }, createdAt }` (append-only, ไม่มี PII)
 **`staffs`** — บัญชีพนักงาน `{ username, passwordHash (Argon2id), displayName, role, isActive, failedLoginCount, lockedUntil, sessionVersion }`
 
 > ที่อยู่และข้อมูลสุขภาพ **ไม่ทำ blind index โดยตั้งใจ** — ข้อมูลอ่อนไหวไม่ควรค้นหาได้
@@ -241,6 +243,8 @@ cookie → verify JWT → โหลด staff จาก DB (isActive) → ตร�
 | ส่งออกข้อมูล (ม.30, 31) | ❌ | ❌ | ✅ |
 | ลบ (ม.33) | ❌ | ❌ | ✅ |
 | ดู audit log | ❌ | ❌ | ✅ |
+| บันทึกยอมรับ / ถอนความยินยอมแทนเจ้าของข้อมูล | ✅ | ✅ | ✅ |
+| อัปโหลดเอกสาร PDPA เวอร์ชันใหม่ | ❌ | ❌ | ✅ |
 
 - **support** — พนักงานด่านหน้า/call center: ยืนยันตัวตนจากข้อมูลที่ mask ไม่จำเป็นต้องเห็นค่าเต็ม (data minimization)
 - **admin** — เจ้าหน้าที่หลังบ้าน: ตรวจเอกสาร แก้ไขข้อมูล แต่ไม่เห็นข้อมูลอ่อนไหว และไม่ส่งออก/ลบเอง
@@ -335,6 +339,47 @@ DEK ตัวจริงอยู่ใน memory แค่ระหว่า�
 
 dpo เท่านั้น → decrypt ทุก field → คืน JSON `{ userId, exportedAt, data, metadata }` → audit log: export
 
+### 6.7 ความยินยอม PDPA และเอกสารแบบมีเวอร์ชัน (`src/services/consent/`) — มาตรา 19, 23
+
+**เอกสาร** (`consent_documents` + ไฟล์ PDF ใน GridFS bucket `consent_files`)
+
+```
+POST /consent-document?title=&note=&fileName=   body = ไฟล์ PDF ตรงๆ (Content-Type: application/pdf, ≤ 10 MB)
+ 1. ตรวจสิทธิ์ (ROLE_POLICY.document = dpo) — ไม่มีสิทธิ์ → 403 + audit denied
+ 2. ตรวจว่าขึ้นต้นด้วย "%PDF-" (ไม่เชื่อ Content-Type) → คำนวณ sha256
+    - sha256 ตรงกับเวอร์ชันล่าสุด → 409 (อัปโหลดไฟล์เดิมซ้ำ)
+ 3. เขียนไฟล์ลง GridFS
+ 4. version = เวอร์ชันล่าสุด + 1 → insert consent_documents (unique index บน version)
+    - อัปโหลดพร้อมกันได้เลขชน → ลองเลขถัดไป (สูงสุด 3 ครั้ง) / ล้มเหลว → ลบไฟล์ใน GridFS ทิ้ง
+ 5. audit log: upload_document
+```
+
+- ไม่มีการแก้ไข/ลบเวอร์ชันเก่า — เป็นหลักฐานว่าเจ้าของข้อมูลยอมรับข้อความใด, `sha256` ใช้ยืนยันว่าไฟล์ไม่ถูกเปลี่ยน
+- เวอร์ชันล่าสุดมีผลทันที: user ที่ยอมรับเวอร์ชันเก่าจะมีสถานะ `outdated` (ต้องยอมรับใหม่)
+
+**ความยินยอมของ user** (`consents` — append-only, ไม่มี PII มีแค่ `userId`)
+
+```
+สถานะ = record ล่าสุดของ user เทียบกับเวอร์ชันล่าสุดของเอกสาร
+  ไม่มี record        → none
+  ล่าสุดคือ withdraw  → withdrawn
+  ล่าสุดคือ accept    → accepted (version ตรงกับล่าสุด) / outdated (เวอร์ชันเก่า)
+
+POST /user   body { ...pii, consentVersion }
+  มีเอกสารในระบบ → consentVersion ต้องเท่ากับเวอร์ชันล่าสุด (ไม่ส่ง → 400, ไม่ตรง → 409)
+  บันทึก consent ก่อน user — สร้าง user ไม่สำเร็จ (เช่น อีเมลซ้ำ) → ลบ consent + DEK ทิ้ง
+
+POST /user/:id/consent { action: "accept", version }      ← version ต้องเป็นล่าสุด ไม่งั้น 409
+POST /user/:id/consent { action: "withdraw", reason }     ← ถอนได้ตลอด ต้องมีเหตุผล
+  → audit log: consent / withdraw_consent
+```
+
+- staff เป็นคนกดบันทึกแทนเจ้าของข้อมูล (`recordedBy`) หลังเปิดเอกสารให้อ่าน
+- การส่ง `version` ที่เปิดให้อ่านมาด้วย กันกรณี DPO อัปโหลดเวอร์ชันใหม่ระหว่างนั้น (ยอมรับเอกสารที่ไม่ได้อ่าน)
+- การถอนความยินยอมไม่ลบข้อมูล — ถ้าเจ้าของข้อมูลขอลบด้วยต้องทำตาม 6.5 แยกต่างหาก
+- ประวัติ consent เก็บไว้แม้ user ถูกลบ (crypto-shredding) เพราะไม่มี PII และเป็นหลักฐานทางกฎหมาย
+- หน้ารายการ `GET /user` แนบ `consent: { status, version, latestVersion }` ของแต่ละคนมาด้วย
+
 ---
 
 ## 7. Flow การค้นหา (Search)
@@ -414,7 +459,12 @@ Base: `/api/v1` — response รูปแบบ `{ code, status, errors, payload
 | GET | `/auth/me` | login แล้ว |
 | GET | `/user?search=&page=&pageSize=` | ทุก role (mask เสมอ) |
 | GET | `/user/:id?reveal=true&reason=` | ทุก role (เห็นเต็มตามสิทธิ์) |
-| POST | `/user` | ทุก role |
+| POST | `/user` body `{ ...pii, consentVersion }` | ทุก role |
+| GET | `/user/:id/consent` (สถานะ + เอกสารล่าสุด + ประวัติ) | ทุก role |
+| POST | `/user/:id/consent` body `{ action: accept, version }` / `{ action: withdraw, reason }` | ทุก role |
+| GET | `/consent-document` (ทุกเวอร์ชัน ใหม่สุดก่อน) / `/consent-document/latest` | ทุก role |
+| GET | `/consent-document/:version/file` (PDF) | ทุก role |
+| POST | `/consent-document?title=&note=&fileName=` body PDF (`application/pdf`) | dpo |
 | PUT | `/user/:id` | admin, dpo |
 | GET | `/user/:id/export` | dpo |
 | DELETE | `/user/:id` body `{ reason }` | dpo |
@@ -436,12 +486,13 @@ src/
 │   ├── auth/                    login
 │   ├── user/                    create, list(search), get(reveal), update, remove, exportData, purgeExpired
 │   │   └── helpers.ts           encryptFields, decryptView, buildSearchIdx, สิทธิ์
+│   ├── consent/                 เอกสาร PDPA (อัปโหลด/เวอร์ชัน/ไฟล์) + ยอมรับ/ถอนความยินยอม
 │   └── auditLog/
 ├── repositories/                คุย DB เท่านั้น
-│   ├── user/  dataKey/  staff/  auditLog/
+│   ├── user/  dataKey/  staff/  auditLog/  consent/  consentDocument/ (GridFS)
 ├── externals/
 │   ├── kms/                     KeyProvider — POC: LocalKeyProvider (env) → เปลี่ยนเป็น KMS/Vault ได้ที่นี่ที่เดียว
-│   └── mongo/collections/       schema: users, data_keys, staffs, audit_logs
+│   └── mongo/collections/       schema: users, data_keys, staffs, audit_logs, consent_documents, consents (+ gridfs.ts)
 ├── middleware/                  authentication, validationHandler, cors, globalErrorHandler
 ├── utility/
 │   ├── crypto/cipher.ts         AES-256-GCM + AAD
@@ -483,6 +534,7 @@ scripts/                         genKeys, seedStaff, rotateKek, rebuildSearchIdx
 - [ ] TLS ระหว่าง app ↔ MongoDB และ encryption at rest ของ MongoDB/disk
 - [ ] `COOKIE_SECURE=true` บน HTTPS (+ CSRF token ถ้าใช้ `SameSite=None`), rate limit การ login ต่อ IP
 - [ ] ระบบจัดการบัญชีพนักงาน / เปลี่ยนรหัสผ่าน / ขั้นตอนอนุมัติ (เช่น admin ขอลบ → dpo อนุมัติ)
+- [ ] consent แยกตามวัตถุประสงค์ (granular — เช่น การตลาด, ส่งต่อบุคคลที่สาม) และช่องทางให้เจ้าของข้อมูลกดยอมรับเอง (ตอนนี้ staff บันทึกแทน)
 - [ ] ด้านกระบวนการ: ฐานทางกฎหมาย / consent (ม.19, 24, 26), privacy notice (ม.23), RoPA (ม.39), DPO (ม.41), DPIA, แผนแจ้งเหตุข้อมูลรั่วไหลภายใน 72 ชม. (ม.37(4)), สัญญากับผู้ประมวลผลข้อมูล
 
 > หมายเหตุ: `bson` ถูก pin ไว้ที่ 7.2.0 และ mongoose `~9.4.1` (เหมือน citizen-portal-api) เพราะเวอร์ชันใหม่กว่าใช้กับ Bun 1.3.x ไม่ได้

@@ -1,8 +1,11 @@
 import { errRes, successRes } from '@/controllers/main';
 import type { Actor } from '@/models/business/actor';
 import type { UserView } from '@/models/business/user';
+import consentRepo from '@/repositories/consent';
+import consentDocumentRepo from '@/repositories/consentDocument';
 import dataKeyRepo from '@/repositories/dataKey';
 import userRepo from '@/repositories/user';
+import { consentSummary } from '@/services/consent/helpers';
 import { blindIndex, postAuditLog } from '@/utility';
 import { PREFIX_MIN } from '@/utility/crypto/blindIndex';
 import { decryptView } from './helpers';
@@ -57,13 +60,28 @@ export default async function list(
   try {
     const result = await userRepo.list({ page, pageSize, desc, filter });
 
+    // สถานะความยินยอมของ user ในหน้านี้ เทียบกับเอกสารเวอร์ชันล่าสุด
+    const [latestDoc, consents] = await Promise.all([
+      consentDocumentRepo.getLatest(),
+      consentRepo.latestByUsers(result.datas.map((doc) => String(doc._id))),
+    ]);
+    const consentByUser = new Map(consents.map((c) => [c.userId, c]));
+
     const datas = await Promise.all(
       result.datas.map(async (doc) => {
         const userId = String(doc._id);
         const dek = await dataKeyRepo.getDek(userId);
         if (!dek) throw new Error(`Data key missing for active user ${userId}`);
         const { view } = decryptView(doc, dek, userId, 'none');
-        return { id: userId, ...view, revealed: [], createdAt: doc.createdAt, updatedAt: doc.updatedAt, retentionUntil: doc.retentionUntil };
+        return {
+          id: userId,
+          ...view,
+          revealed: [],
+          createdAt: doc.createdAt,
+          updatedAt: doc.updatedAt,
+          retentionUntil: doc.retentionUntil,
+          consent: consentSummary(consentByUser.get(userId), latestDoc?.version ?? null),
+        };
       })
     );
 

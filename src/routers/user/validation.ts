@@ -42,7 +42,17 @@ function byId(): ValidationChain[] {
 }
 
 function create(): ValidationChain[] {
-  return piiFields(false);
+  // consentVersion = เวอร์ชันเอกสาร PDPA ที่เจ้าของข้อมูลยอมรับตอนสร้าง (บังคับที่ service ถ้ามีเอกสารในระบบ)
+  return [...piiFields(false), body('consentVersion').optional().isInt({ min: 1 }).toInt()];
+}
+
+function recordConsent(): ValidationChain[] {
+  return [
+    param('id').isMongoId(),
+    body('action').isIn(['accept', 'withdraw']),
+    body('version').if(body('action').equals('accept')).isInt({ min: 1 }).toInt(),
+    body('reason').if(body('action').equals('withdraw')).isString().trim().notEmpty().isLength({ max: 300 }),
+  ];
 }
 
 function update(): ValidationChain[] {
@@ -53,4 +63,4 @@ function remove(): ValidationChain[] {
   return [param('id').isMongoId(), body('reason').isString().trim().notEmpty().isLength({ max: 300 })];
 }
 
-export default { list, getById, byId, create, update, remove };
+export default { list, getById, byId, create, update, remove, recordConsent };

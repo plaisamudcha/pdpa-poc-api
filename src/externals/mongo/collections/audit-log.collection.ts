@@ -2,7 +2,20 @@ import mongoose, { Schema, type Model } from 'mongoose';
 import applyIdTransform from '@/externals/mongo/schema/applyIdTransform';
 import type { Actor } from '@/models/business/actor';
 
-const AUDIT_ACTIONS = ['create', 'list', 'search', 'read', 'update', 'export', 'erase', 'login', 'logout'] as const;
+const AUDIT_ACTIONS = [
+  'create',
+  'list',
+  'search',
+  'read',
+  'update',
+  'export',
+  'erase',
+  'login',
+  'logout',
+  'consent',
+  'withdraw_consent',
+  'upload_document',
+] as const;
 const AUDIT_RESULTS = ['ok', 'denied', 'not_found'] as const;
 
 type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -92,7 +92,7 @@ export function decryptView(doc: Pick<TypeUser, 'pii'>, dek: Buffer, userId: str
   return { view, revealed };
 }
 
-export function can(actor: Actor, permission: 'create' | 'update' | 'erase' | 'export' | 'audit') {
+export function can(actor: Actor, permission: 'create' | 'update' | 'erase' | 'export' | 'audit' | 'consent' | 'document') {
   return ROLE_POLICY[actor.role][permission];
 }
 
