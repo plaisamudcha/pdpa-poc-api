@@ -10,6 +10,7 @@ async function list(req: Request, res: Response) {
     {
       page: Number(query.page ?? config.defaultPage),
       pageSize: Number(query.pageSize ?? config.maxLimit),
+      category: query.category as IAuditLogListDto['category'],
       action: query.action as IAuditLogListDto['action'],
       result: query.result as IAuditLogListDto['result'],
       username: query.username,

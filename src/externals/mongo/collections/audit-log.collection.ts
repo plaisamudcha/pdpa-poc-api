@@ -21,6 +21,11 @@ const AUDIT_RESULTS = ['ok', 'denied', 'not_found'] as const;
 type AuditAction = (typeof AUDIT_ACTIONS)[number];
 type AuditResult = (typeof AUDIT_RESULTS)[number];
 
+/** หมวดของ log — auth = ประวัติการเข้าสู่ระบบ, data = การเข้าถึงข้อมูลส่วนบุคคล (ทุก action ที่ไม่ใช่ auth) */
+const AUDIT_CATEGORIES = ['auth', 'data'] as const;
+const AUTH_ACTIONS: readonly AuditAction[] = ['login', 'logout'];
+type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
+
 /** Audit log — ห้ามมี PII plaintext อยู่ใน log */
 interface TypeAuditLog {
   actor: Actor;
@@ -59,6 +64,6 @@ applyIdTransform(auditLogSchema);
 
 const AuditLogModel: Model<TypeAuditLog> = mongoose.models.AuditLog || mongoose.model<TypeAuditLog>('AuditLog', auditLogSchema);
 
-export { AUDIT_ACTIONS, AUDIT_RESULTS };
-export type { TypeAuditLog, AuditAction, AuditResult };
+export { AUDIT_ACTIONS, AUDIT_RESULTS, AUDIT_CATEGORIES, AUTH_ACTIONS };
+export type { TypeAuditLog, AuditAction, AuditResult, AuditCategory };
 export default AuditLogModel;
