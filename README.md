@@ -32,6 +32,7 @@ POC การเข้ารหัสข้อมูลส่วนบุคค�
 
 ```bash
 docker compose up -d            # MongoDB ที่ localhost:27017
+(cd ../pdpa-crypto && bun link) # ลงทะเบียน library @pdpa/crypto ในเครื่อง (ครั้งแรกครั้งเดียว)
 bun install
 cp .env.example .env
 bun run gen-keys                # สุ่ม key ทั้งหมด → คัดลอกผลลัพธ์ไปใส่ใน .env
@@ -156,7 +157,10 @@ BLIND_INDEX_KEY ─ HMAC-SHA256 ─► users.searchIdx   (ใช้ค้นห�
 | **BLIND_INDEX_KEY** | 1 | HMAC สำหรับค้นหา | เดาค่าแล้วตรวจได้ | ค้นหาไม่ได้จนกว่าจะ rebuild index |
 | **JWT_SECRET** | 1 | เซ็น token login | ปลอม login ได้ | ทุกคนต้อง login ใหม่ |
 
-### รายละเอียดการ encrypt (`src/utility/crypto/cipher.ts`)
+### รายละเอียดการ encrypt (`pdpa-crypto/src/cipher.ts`)
+
+> cipher, blind index, KeyProvider และการจัดการ DEK แยกเป็น library `@pdpa/crypto` (repo `pdpa-crypto` ข้างๆ repo นี้) ให้โปรเจกต์อื่นใช้ซ้ำได้
+> ตอนนี้ API ใช้ผ่าน `bun link` (`"link:@pdpa/crypto"` = ใช้ working copy ในเครื่อง) — เมื่อ push library ขึ้น GitHub แล้วให้เปลี่ยนเป็น `"github:plaisamudcha/pdpa-crypto#v0.1.0"` เพื่อปักเวอร์ชัน
 
 ```
 encrypt(DEK, "สมชาย", AAD = "<userId>:firstName")
@@ -489,20 +493,22 @@ src/
 │   ├── consent/                 เอกสาร PDPA (อัปโหลด/เวอร์ชัน/ไฟล์) + ยอมรับ/ถอนความยินยอม
 │   └── auditLog/
 ├── repositories/                คุย DB เท่านั้น
-│   ├── user/  dataKey/  staff/  auditLog/  consent/  consentDocument/ (GridFS)
+│   ├── user/  staff/  auditLog/  consent/  consentDocument/ (GridFS)
+│   └── dataKey/                 keyring ของ @pdpa/crypto + store.ts (DataKeyStore บน data_keys)
 ├── externals/
-│   ├── kms/                     KeyProvider — POC: LocalKeyProvider (env) → เปลี่ยนเป็น KMS/Vault ได้ที่นี่ที่เดียว
+│   ├── kms/                     เลือก KeyProvider — POC: LocalKeyProvider (env) → เปลี่ยนเป็น KMS/Vault ได้ที่นี่ที่เดียว
 │   └── mongo/collections/       schema: users, data_keys, staffs, audit_logs, consent_documents, consents (+ gridfs.ts)
 ├── middleware/                  authentication, validationHandler, cors, globalErrorHandler
 ├── utility/
-│   ├── crypto/cipher.ts         AES-256-GCM + AAD
-│   ├── crypto/blindIndex.ts     HMAC, prefix, normalize
+│   ├── crypto/blindIndex.ts     createBlindIndex + label ของโปรเจกต์นี้
 │   └── helper/                  mask, jwt, authCookie, auditLog
 ├── jobs/retention.ts
 ├── models/dto/  models/business/
 └── types/
 scripts/                         genKeys, seedStaff, rotateKek, rebuildSearchIdx
 ```
+
+cipher (AES-256-GCM + AAD), blind index, KeyProvider และ keyring (DEK) อยู่ใน library `@pdpa/crypto` (repo `pdpa-crypto`) พร้อม unit test
 
 ---
 

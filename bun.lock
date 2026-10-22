@@ -5,6 +5,7 @@
     "": {
       "name": "pdpa-poc-api",
       "dependencies": {
+        "@pdpa/crypto": "link:@pdpa/crypto",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.5",
         "express": "^5.2.1",
@@ -32,6 +33,8 @@
   },
   "packages": {
     "@mongodb-js/saslprep": ["@mongodb-js/saslprep@1.6.0", "", { "dependencies": { "sparse-bitfield": "^3.0.3" } }, "sha512-19jGXfpctLDJUELLUZGJ5BllcLT7rHdF+gTTaN2jzqu0bGkUhpdcYtgK2Vux+g3zuBAa0TM/W666QMIjYhYujw=="],
+
+    "@pdpa/crypto": ["@pdpa/crypto@link:@pdpa/crypto", {}],
 
     "@types/body-parser": ["@types/body-parser@1.19.6", "", { "dependencies": { "@types/connect": "*", "@types/node": "*" } }, "sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g=="],
 

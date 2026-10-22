@@ -1,4 +1,4 @@
-import cipher from './crypto/cipher';
+import { cipher } from '@pdpa/crypto';
 import blindIndex from './crypto/blindIndex';
 import mask from './helper/mask';
 import jwtHelper from './helper/jwt';
